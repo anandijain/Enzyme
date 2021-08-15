@@ -5736,9 +5736,10 @@ public:
               Builder2.CreateCall(orig->getFunctionType(), callval, args));
           cubcall->setDebugLoc(gutils->getNewFromOriginal(orig->getDebugLoc()));
           cubcall->setCallingConv(orig->getCallingConv());
+          Value *cubsq = Builder2.CreateFMul(cubcall, cubcall);
           Value *dif0 = Builder2.CreateFDiv(
-              Builder2.CreateFMul(diffe(orig, Builder2), x),
-              Builder2.CreateFMul(ConstantFP::get(x->getType(), 3), cubcall));
+              diffe(orig, Builder2),
+              Builder2.CreateFMul(ConstantFP::get(x->getType(), 3), cubsq));
           addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
           return;
         }
