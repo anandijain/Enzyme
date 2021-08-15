@@ -6144,8 +6144,23 @@ public:
               gutils->isConstantInstruction(orig))
             return;
 
-          IRBuilder<> Builder2(call.getParent());
-          getReverseBuilder(Builder2);
+          IRBuilder<> Builder2 = Mode == DerivativeMode::ForwardMode
+                                     ? IRBuilder<>(&call)
+                                     : IRBuilder<>(call.getParent());
+          Value *op = Mode == DerivativeMode::ForwardMode
+                          ? orig->getArgOperand(0)
+                          : orig;
+          Value *todiff = Mode == DerivativeMode::ForwardMode
+                              ? orig
+                              : orig->getArgOperand(0);
+
+          if (Mode == DerivativeMode::ForwardMode) {
+            getForwardBuilder(Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            getReverseBuilder(Builder2);
+          }
+
           Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
                             Builder2);
 
@@ -6159,9 +6174,15 @@ public:
               cal, ConstantFP::get(
                        sq->getType(),
                        -1.1283791670955125738961589031215451716881012586580));
-          cal = Builder2.CreateFMul(cal, diffe(orig, Builder2));
-          setDiffe(orig, Constant::getNullValue(orig->getType()), Builder2);
-          addToDiffe(orig->getArgOperand(0), cal, Builder2, x->getType());
+          cal = Builder2.CreateFMul(cal, diffe(op, Builder2));
+
+          if (Mode == DerivativeMode::ForwardMode) {
+            setDiffe(todiff, cal, Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            setDiffe(op, Constant::getNullValue(orig->getType()), Builder2);
+            addToDiffe(todiff, cal, Builder2, x->getType());
+          }
           return;
         }
 
@@ -6179,8 +6200,23 @@ public:
               gutils->isConstantInstruction(orig))
             return;
 
-          IRBuilder<> Builder2(call.getParent());
-          getReverseBuilder(Builder2);
+          IRBuilder<> Builder2 = Mode == DerivativeMode::ForwardMode
+                                     ? IRBuilder<>(&call)
+                                     : IRBuilder<>(call.getParent());
+          Value *op = Mode == DerivativeMode::ForwardMode
+                          ? orig->getArgOperand(0)
+                          : orig;
+          Value *todiff = Mode == DerivativeMode::ForwardMode
+                              ? orig
+                              : orig->getArgOperand(0);
+
+          if (Mode == DerivativeMode::ForwardMode) {
+            getForwardBuilder(Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            getReverseBuilder(Builder2);
+          }
+
           Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
                             Builder2);
 
@@ -6191,9 +6227,15 @@ public:
                   called->getFunctionType()),
               std::vector<Value *>({x}));
           dx = Builder2.CreateFNeg(dx);
-          dx = Builder2.CreateFMul(dx, diffe(orig, Builder2));
-          setDiffe(orig, Constant::getNullValue(orig->getType()), Builder2);
-          addToDiffe(orig->getArgOperand(0), dx, Builder2, x->getType());
+          dx = Builder2.CreateFMul(dx, diffe(op, Builder2));
+
+          if (Mode == DerivativeMode::ForwardMode) {
+            setDiffe(todiff, dx, Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            setDiffe(op, Constant::getNullValue(orig->getType()), Builder2);
+            addToDiffe(todiff, dx, Builder2, x->getType());
+          }
           return;
         }
 
@@ -6211,8 +6253,23 @@ public:
               gutils->isConstantInstruction(orig))
             return;
 
-          IRBuilder<> Builder2(call.getParent());
-          getReverseBuilder(Builder2);
+          IRBuilder<> Builder2 = Mode == DerivativeMode::ForwardMode
+                                     ? IRBuilder<>(&call)
+                                     : IRBuilder<>(call.getParent());
+          Value *op = Mode == DerivativeMode::ForwardMode
+                          ? orig->getArgOperand(0)
+                          : orig;
+          Value *todiff = Mode == DerivativeMode::ForwardMode
+                              ? orig
+                              : orig->getArgOperand(0);
+
+          if (Mode == DerivativeMode::ForwardMode) {
+            getForwardBuilder(Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            getReverseBuilder(Builder2);
+          }
+
           Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
                             Builder2);
 
@@ -6235,9 +6292,14 @@ public:
               std::vector<Value *>({ConstantInt::get(intType, 2), x}));
           Value *dx = Builder2.CreateFSub(d0, d2);
           dx = Builder2.CreateFMul(dx, ConstantFP::get(x->getType(), 0.5));
-          dx = Builder2.CreateFMul(dx, diffe(orig, Builder2));
-          setDiffe(orig, Constant::getNullValue(orig->getType()), Builder2);
-          addToDiffe(orig->getArgOperand(0), dx, Builder2, x->getType());
+          dx = Builder2.CreateFMul(dx, diffe(op, Builder2));
+          if (Mode == DerivativeMode::ForwardMode) {
+            setDiffe(todiff, dx, Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            setDiffe(op, Constant::getNullValue(orig->getType()), Builder2);
+            addToDiffe(todiff, dx, Builder2, x->getType());
+          }
           return;
         }
 
@@ -6255,8 +6317,23 @@ public:
               gutils->isConstantInstruction(orig))
             return;
 
-          IRBuilder<> Builder2(call.getParent());
-          getReverseBuilder(Builder2);
+          IRBuilder<> Builder2 = Mode == DerivativeMode::ForwardMode
+                                     ? IRBuilder<>(&call)
+                                     : IRBuilder<>(call.getParent());
+          Value *op = Mode == DerivativeMode::ForwardMode
+                          ? orig->getArgOperand(0)
+                          : orig;
+          Value *todiff = Mode == DerivativeMode::ForwardMode
+                              ? orig
+                              : orig->getArgOperand(0);
+
+          if (Mode == DerivativeMode::ForwardMode) {
+            getForwardBuilder(Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            getReverseBuilder(Builder2);
+          }
+
           Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(1)),
                             Builder2);
           Value *n = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
@@ -6276,14 +6353,21 @@ public:
 
           Value *dx = Builder2.CreateFSub(d0, d2);
           dx = Builder2.CreateFMul(dx, ConstantFP::get(x->getType(), 0.5));
-          dx = Builder2.CreateFMul(dx, diffe(orig, Builder2));
-          setDiffe(orig, Constant::getNullValue(orig->getType()), Builder2);
-          addToDiffe(orig->getArgOperand(1), dx, Builder2, x->getType());
+          dx = Builder2.CreateFMul(dx, diffe(op, Builder2));
+
+          if (Mode == DerivativeMode::ForwardMode) {
+            setDiffe(todiff, dx, Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            setDiffe(op, Constant::getNullValue(orig->getType()), Builder2);
+            addToDiffe(todiff, dx, Builder2, x->getType());
+          }
           return;
         }
 
         if (funcName == "julia.write_barrier") {
-          if (Mode == DerivativeMode::ReverseModeGradient) {
+          if (Mode == DerivativeMode::ReverseModeGradient ||
+              Mode == DerivativeMode::ForwardMode) {
             eraseIfUnused(*orig, /*erase*/ true, /*check*/ false);
             return;
           }
@@ -6304,6 +6388,7 @@ public:
         Intrinsic::ID ID = Intrinsic::not_intrinsic;
         if (isMemFreeLibMFunction(funcName, &ID)) {
           if (Mode == DerivativeMode::ReverseModePrimal ||
+              Mode == DerivativeMode::ForwardMode ||
               gutils->isConstantInstruction(orig)) {
             eraseIfUnused(*orig);
             return;
@@ -6332,10 +6417,24 @@ public:
             return;
           }
 
-          IRBuilder<> Builder2(call.getParent());
-          getReverseBuilder(Builder2);
+          IRBuilder<> Builder2 = Mode == DerivativeMode::ForwardMode
+                                     ? IRBuilder<>(&call)
+                                     : IRBuilder<>(call.getParent());
+          Value *op = Mode == DerivativeMode::ForwardMode
+                          ? orig->getArgOperand(0)
+                          : orig;
+          Value *todiff = Mode == DerivativeMode::ForwardMode
+                              ? orig
+                              : orig->getArgOperand(0);
 
-          Value *vdiff = diffe(orig, Builder2);
+          if (Mode == DerivativeMode::ForwardMode) {
+            getForwardBuilder(Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            getReverseBuilder(Builder2);
+          }
+
+          Value *vdiff = diffe(op, Builder2);
           Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
                             Builder2);
 
@@ -6356,8 +6455,13 @@ public:
               Builder2.CreateFMul(Builder2.CreateExtractValue(vdiff, {1}),
                                   dcos));
 
-          setDiffe(orig, Constant::getNullValue(orig->getType()), Builder2);
-          addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
+          if (Mode == DerivativeMode::ForwardMode) {
+            setDiffe(todiff, dif0, Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            setDiffe(op, Constant::getNullValue(orig->getType()), Builder2);
+            addToDiffe(todiff, dif0, Builder2, x->getType());
+          }
           return;
         }
         if (funcName == "cabs" || funcName == "cabsf" || funcName == "cabsl") {
@@ -6397,6 +6501,7 @@ public:
                            Builder2.CreateFMul(args[i], div), Builder2,
                            orig->getType());
             return;
+
           } else {
             llvm::errs() << *orig << "\n";
             llvm_unreachable("unknown calling convention found for cabs");
@@ -6417,18 +6522,38 @@ public:
             return;
           }
 
-          IRBuilder<> Builder2(call.getParent());
-          getReverseBuilder(Builder2);
+          IRBuilder<> Builder2 = Mode == DerivativeMode::ForwardMode
+                                     ? IRBuilder<>(&call)
+                                     : IRBuilder<>(call.getParent());
+          Value *op = Mode == DerivativeMode::ForwardMode
+                          ? orig->getArgOperand(0)
+                          : orig;
+          Value *todiff = Mode == DerivativeMode::ForwardMode
+                              ? orig
+                              : orig->getArgOperand(0);
 
-          Value *vdiff = diffe(orig, Builder2);
+          if (Mode == DerivativeMode::ForwardMode) {
+            getForwardBuilder(Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            getReverseBuilder(Builder2);
+          }
+
+          Value *vdiff = diffe(op, Builder2);
           Value *exponent = lookup(
               gutils->getNewFromOriginal(orig->getArgOperand(1)), Builder2);
 
           Value *args[] = {vdiff, exponent};
 
           CallInst *darg = cast<CallInst>(Builder2.CreateCall(called, args));
-          setDiffe(orig, Constant::getNullValue(orig->getType()), Builder2);
-          addToDiffe(orig->getArgOperand(0), darg, Builder2, orig->getType());
+
+          if (Mode == DerivativeMode::ForwardMode) {
+            setDiffe(todiff, darg, Builder2);
+          } else if (Mode == DerivativeMode::ReverseModeGradient ||
+                     Mode == DerivativeMode::ReverseModeCombined) {
+            setDiffe(op, Constant::getNullValue(orig->getType()), Builder2);
+            addToDiffe(todiff, darg, Builder2, orig->getType());
+          }
           return;
         }
       }
