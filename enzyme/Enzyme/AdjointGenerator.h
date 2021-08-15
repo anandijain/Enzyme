@@ -5591,27 +5591,54 @@ public:
           }
         }
         eraseIfUnused(*orig);
-        if (Mode == DerivativeMode::ReverseModePrimal ||
-            gutils->isConstantInstruction(orig))
+        if (gutils->isConstantInstruction(orig))
           return;
 
-        IRBuilder<> Builder2(call.getParent());
-        getReverseBuilder(Builder2);
-        Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
-                          Builder2);
-        Value *oneMx2 = Builder2.CreateFSub(ConstantFP::get(x->getType(), 1.0),
-                                            Builder2.CreateFMul(x, x));
+        switch (Mode) {
+        case DerivativeMode::ForwardMode: {
+          IRBuilder<> Builder2(&call);
+          getForwardBuilder(Builder2);
+          Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
+                            Builder2);
+          Value *oneMx2 = Builder2.CreateFSub(
+              ConstantFP::get(x->getType(), 1.0), Builder2.CreateFMul(x, x));
 
-        SmallVector<Value *, 1> args = {oneMx2};
-        Type *tys[] = {x->getType()};
-        auto cal = cast<CallInst>(
-            Builder2.CreateCall(Intrinsic::getDeclaration(called->getParent(),
-                                                          Intrinsic::sqrt, tys),
-                                args));
+          SmallVector<Value *, 1> args = {oneMx2};
+          Type *tys[] = {x->getType()};
+          auto cal = cast<CallInst>(Builder2.CreateCall(
+              Intrinsic::getDeclaration(called->getParent(), Intrinsic::sqrt,
+                                        tys),
+              args));
 
-        Value *dif0 = Builder2.CreateFDiv(diffe(orig, Builder2), cal);
-        addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
-        return;
+          Value *dif0 =
+              Builder2.CreateFDiv(diffe(orig->getArgOperand(0), Builder2), cal);
+          setDiffe(orig, dif0, Builder2);
+          return;
+        }
+        case DerivativeMode::ReverseModeGradient:
+        case DerivativeMode::ReverseModeCombined: {
+          IRBuilder<> Builder2(call.getParent());
+          getReverseBuilder(Builder2);
+          Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
+                            Builder2);
+          Value *oneMx2 = Builder2.CreateFSub(
+              ConstantFP::get(x->getType(), 1.0), Builder2.CreateFMul(x, x));
+
+          SmallVector<Value *, 1> args = {oneMx2};
+          Type *tys[] = {x->getType()};
+          auto cal = cast<CallInst>(Builder2.CreateCall(
+              Intrinsic::getDeclaration(called->getParent(), Intrinsic::sqrt,
+                                        tys),
+              args));
+
+          Value *dif0 = Builder2.CreateFDiv(diffe(orig, Builder2), cal);
+          addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
+          return;
+        }
+        case DerivativeMode::ReverseModePrimal: {
+          return;
+        }
+        }
       }
 
       if (funcName == "atan" || funcName == "atanf" || funcName == "atanl" ||
@@ -5624,19 +5651,38 @@ public:
           }
         }
         eraseIfUnused(*orig);
-        if (Mode == DerivativeMode::ReverseModePrimal ||
-            gutils->isConstantInstruction(orig))
+        if (gutils->isConstantInstruction(orig))
           return;
 
-        IRBuilder<> Builder2(call.getParent());
-        getReverseBuilder(Builder2);
-        Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
-                          Builder2);
-        Value *onePx2 = Builder2.CreateFAdd(ConstantFP::get(x->getType(), 1.0),
-                                            Builder2.CreateFMul(x, x));
-        Value *dif0 = Builder2.CreateFDiv(diffe(orig, Builder2), onePx2);
-        addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
-        return;
+        switch (Mode) {
+        case DerivativeMode::ForwardMode: {
+          IRBuilder<> Builder2(&call);
+          getForwardBuilder(Builder2);
+          Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
+                            Builder2);
+          Value *onePx2 = Builder2.CreateFAdd(
+              ConstantFP::get(x->getType(), 1.0), Builder2.CreateFMul(x, x));
+          Value *dif0 = Builder2.CreateFDiv(
+              diffe(orig->getArgOperand(0), Builder2), onePx2);
+          setDiffe(orig, dif0, Builder2);
+          return;
+        }
+        case DerivativeMode::ReverseModeGradient:
+        case DerivativeMode::ReverseModeCombined: {
+          IRBuilder<> Builder2(call.getParent());
+          getReverseBuilder(Builder2);
+          Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
+                            Builder2);
+          Value *onePx2 = Builder2.CreateFAdd(
+              ConstantFP::get(x->getType(), 1.0), Builder2.CreateFMul(x, x));
+          Value *dif0 = Builder2.CreateFDiv(diffe(orig, Builder2), onePx2);
+          addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
+          return;
+        }
+        case DerivativeMode::ReverseModePrimal: {
+          return;
+        }
+        }
       }
 
       if (funcName == "cbrt") {
@@ -5648,29 +5694,58 @@ public:
           }
         }
         eraseIfUnused(*orig);
-        if (Mode == DerivativeMode::ReverseModePrimal ||
-            gutils->isConstantInstruction(orig))
+        if (gutils->isConstantInstruction(orig))
           return;
 
-        IRBuilder<> Builder2(call.getParent());
-        getReverseBuilder(Builder2);
-        Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
-                          Builder2);
-        Value *args[] = {x};
+        switch (Mode) {
+        case DerivativeMode::ForwardMode: {
+          IRBuilder<> Builder2(&call);
+          getForwardBuilder(Builder2);
+          Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
+                            Builder2);
+          Value *args[] = {x};
 #if LLVM_VERSION_MAJOR >= 11
-        auto callval = orig->getCalledOperand();
+          auto callval = orig->getCalledOperand();
 #else
-        auto callval = orig->getCalledValue();
+          auto callval = orig->getCalledValue();
 #endif
-        CallInst *cubcall = cast<CallInst>(
-            Builder2.CreateCall(orig->getFunctionType(), callval, args));
-        cubcall->setDebugLoc(gutils->getNewFromOriginal(orig->getDebugLoc()));
-        cubcall->setCallingConv(orig->getCallingConv());
-        Value *dif0 = Builder2.CreateFDiv(
-            Builder2.CreateFMul(diffe(orig, Builder2), x),
-            Builder2.CreateFMul(ConstantFP::get(x->getType(), 3), cubcall));
-        addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
-        return;
+          CallInst *cubcall = cast<CallInst>(
+              Builder2.CreateCall(orig->getFunctionType(), callval, args));
+          cubcall->setDebugLoc(gutils->getNewFromOriginal(orig->getDebugLoc()));
+          cubcall->setCallingConv(orig->getCallingConv());
+          Value *cubsq = Builder2.CreateFMul(cubcall, cubcall);
+          Value *dif0 = Builder2.CreateFDiv(
+              diffe(orig->getArgOperand(0), Builder2),
+              Builder2.CreateFMul(ConstantFP::get(x->getType(), 3), cubsq));
+          setDiffe(orig, dif0, Builder2);
+          return;
+        }
+        case DerivativeMode::ReverseModeGradient:
+        case DerivativeMode::ReverseModeCombined: {
+          IRBuilder<> Builder2(call.getParent());
+          getReverseBuilder(Builder2);
+          Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
+                            Builder2);
+          Value *args[] = {x};
+#if LLVM_VERSION_MAJOR >= 11
+          auto callval = orig->getCalledOperand();
+#else
+          auto callval = orig->getCalledValue();
+#endif
+          CallInst *cubcall = cast<CallInst>(
+              Builder2.CreateCall(orig->getFunctionType(), callval, args));
+          cubcall->setDebugLoc(gutils->getNewFromOriginal(orig->getDebugLoc()));
+          cubcall->setCallingConv(orig->getCallingConv());
+          Value *dif0 = Builder2.CreateFDiv(
+              Builder2.CreateFMul(diffe(orig, Builder2), x),
+              Builder2.CreateFMul(ConstantFP::get(x->getType(), 3), cubcall));
+          addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
+          return;
+        }
+        case DerivativeMode::ReverseModePrimal: {
+          return;
+        }
+        }
       }
 
       if (funcName == "tanhf" || funcName == "tanh") {
@@ -5682,25 +5757,49 @@ public:
           }
         }
         eraseIfUnused(*orig);
-        if (Mode == DerivativeMode::ReverseModePrimal ||
-            gutils->isConstantInstruction(orig))
+        if (gutils->isConstantInstruction(orig))
           return;
 
-        IRBuilder<> Builder2(call.getParent());
-        getReverseBuilder(Builder2);
-        Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
-                          Builder2);
+        switch (Mode) {
+        case DerivativeMode::ForwardMode: {
+          IRBuilder<> Builder2(call.getParent());
+          getReverseBuilder(Builder2);
+          Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
+                            Builder2);
 
-        SmallVector<Value *, 1> args = {x};
-        auto coshf = gutils->oldFunc->getParent()->getOrInsertFunction(
-            (funcName == "tanh") ? "cosh" : "coshf", called->getFunctionType(),
-            called->getAttributes());
-        auto cal = cast<CallInst>(Builder2.CreateCall(coshf, args));
-        Value *dif0 = Builder2.CreateFDiv(diffe(orig, Builder2),
-                                          Builder2.CreateFMul(cal, cal));
-        setDiffe(orig, Constant::getNullValue(orig->getType()), Builder2);
-        addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
-        return;
+          SmallVector<Value *, 1> args = {x};
+          auto coshf = gutils->oldFunc->getParent()->getOrInsertFunction(
+              (funcName == "tanh") ? "cosh" : "coshf",
+              called->getFunctionType(), called->getAttributes());
+          auto cal = cast<CallInst>(Builder2.CreateCall(coshf, args));
+          Value *dif0 = Builder2.CreateFDiv(diffe(orig, Builder2),
+                                            Builder2.CreateFMul(cal, cal));
+          setDiffe(orig, Constant::getNullValue(orig->getType()), Builder2);
+          addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
+          return;
+        }
+        case DerivativeMode::ReverseModeGradient:
+        case DerivativeMode::ReverseModeCombined: {
+          IRBuilder<> Builder2(call.getParent());
+          getReverseBuilder(Builder2);
+          Value *x = lookup(gutils->getNewFromOriginal(orig->getArgOperand(0)),
+                            Builder2);
+
+          SmallVector<Value *, 1> args = {x};
+          auto coshf = gutils->oldFunc->getParent()->getOrInsertFunction(
+              (funcName == "tanh") ? "cosh" : "coshf",
+              called->getFunctionType(), called->getAttributes());
+          auto cal = cast<CallInst>(Builder2.CreateCall(coshf, args));
+          Value *dif0 = Builder2.CreateFDiv(diffe(orig, Builder2),
+                                            Builder2.CreateFMul(cal, cal));
+          setDiffe(orig, Constant::getNullValue(orig->getType()), Builder2);
+          addToDiffe(orig->getArgOperand(0), dif0, Builder2, x->getType());
+          return;
+        }
+        case DerivativeMode::ReverseModePrimal: {
+          return;
+        }
+        }
       }
 
       if (funcName == "coshf" || funcName == "cosh") {
