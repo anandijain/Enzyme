@@ -6633,7 +6633,8 @@ public:
       // TODO enable this if we need to free the memory
       // NOTE THAT TOPLEVEL IS THERE SIMPLY BECAUSE THAT WAS PREVIOUS ATTITUTE
       // TO FREE'ing
-      if (Mode != DerivativeMode::ReverseModeCombined) {
+      if (Mode == DerivativeMode::ReverseModeGradient ||
+          Mode == DerivativeMode::ReverseModePrimal) {
         if ((primalNeededInReverse &&
              !gutils->unnecessaryIntermediates.count(orig)) ||
             hasPDFree) {
@@ -6655,7 +6656,7 @@ public:
           gutils->replaceAWithB(newCall, pn);
           gutils->erase(newCall);
         }
-      } else {
+      } else if (Mode == DerivativeMode::ReverseModeCombined) {
         IRBuilder<> Builder2(call.getParent());
         getReverseBuilder(Builder2);
         freeKnownAllocation(Builder2, lookup(newCall, Builder2), *called,
@@ -6730,7 +6731,7 @@ public:
           // memset->addParamAttr(0, Attribute::getWithAlignment(Context,
           // inst->getAlignment()));
           memset->addParamAttr(0, Attribute::NonNull);
-        } else {
+        } else if (Mode == DerivativeMode::ReverseModeGradient) {
           PHINode *toReplace = BuilderZ.CreatePHI(
               cast<PointerType>(call.getArgOperand(0)->getType())
                   ->getElementType(),
@@ -6756,7 +6757,7 @@ public:
       // TO FREE'ing
       if (Mode == DerivativeMode::ReverseModeGradient) {
         eraseIfUnused(*orig, /*erase*/ true, /*check*/ false);
-      } else if (Mode != DerivativeMode::ReverseModeCombined) {
+      } else if (Mode == DerivativeMode::ReverseModeCombined) {
         // if (is_value_needed_in_reverse<Primal>(
         //        TR, gutils, orig, /*topLevel*/ Mode ==
         //        DerivativeMode::Both))
@@ -6769,7 +6770,7 @@ public:
         // to find the shadow pointer will use the shadow of null rather than
         // the true shadow of this
         //}
-      } else {
+      } else if (Mode == DerivativeMode::ReverseModePrimal) {
         IRBuilder<> Builder2(newCall->getNextNode());
         auto load = Builder2.CreateLoad(
             gutils->getNewFromOriginal(call.getOperand(0)), "posix_preread");
