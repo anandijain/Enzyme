@@ -6876,7 +6876,12 @@ public:
           goto badaugmentedfn;
 
         for (unsigned i = 0; i < pre_args.size(); ++i) {
-          if (pre_args[i]->getType() != FT->getParamType(i))
+          if (pre_args[i]->getType() == FT->getParamType(i))
+            continue;
+          else if (!orig->getCalledFunction())
+            pre_args[i] =
+                BuilderZ.CreateBitCast(pre_args[i], FT->getParamType(i));
+          else
             goto badaugmentedfn;
         }
 
@@ -7194,7 +7199,11 @@ public:
       goto badfn;
 
     for (unsigned i = 0; i < args.size(); ++i) {
-      if (args[i]->getType() != FT->getParamType(i))
+      if (args[i]->getType() == FT->getParamType(i))
+        continue;
+      else if (!orig->getCalledFunction())
+        args[i] = Builder2.CreateBitCast(args[i], FT->getParamType(i));
+      else
         goto badfn;
     }
 
