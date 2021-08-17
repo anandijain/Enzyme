@@ -3824,40 +3824,62 @@ public:
     }
 
     if (funcName == "MPI_Wait" || funcName == "PMPI_Wait") {
+      assert(!gutils->isConstantValue(call.getOperand(0)));
+
+      auto i64 = Type::getInt64Ty(call.getContext());
+      Type *types[] = {
+          /*0 */ Type::getInt8PtrTy(call.getContext()),
+          /*1 */ i64,
+          /*2 */ Type::getInt8PtrTy(call.getContext()),
+          /*3 */ i64,
+          /*4 */ i64,
+          /*5 */ Type::getInt8PtrTy(call.getContext()),
+          /*6 */ Type::getInt8Ty(call.getContext()),
+      };
+      auto impi = StructType::get(call.getContext(), types, false);
+
+      Value *toCache = nullptr;
+
+      if (Mode == DerivativeMode::ReverseModePrimal ||
+          Mode == DerivativeMode::ReverseModeCombined) {
+        IRBuilder<> BuilderZ(gutils->getNewFromOriginal(&call));
+
+        Value *d_req = gutils->invertPointerM(call.getOperand(0), BuilderZ);
+        if (d_req->getType()->isIntegerTy()) {
+          d_req = BuilderZ.CreateIntToPtr(
+              d_req,
+              PointerType::getUnqual(Type::getInt8PtrTy(call.getContext())));
+        }
+
+        Value *d_reqp = BuilderZ.CreateLoad(BuilderZ.CreatePointerCast(
+            d_req, PointerType::getUnqual(PointerType::getUnqual(impi))));
+
+        toCache = d_reqp;
+        if (auto GV = gutils->newFunc->getParent()->getNamedValue(
+                "ompi_request_null")) {
+          Value *isNull = BuilderZ.CreateICmpEQ(
+              d_reqp, BuilderZ.CreateBitCast(GV, d_reqp->getType()));
+          toCache = BuilderZ.CreateSelect(
+              isNull, Constant::getNullValue(d_reqp->getType()), d_reqp);
+        }
+        gutils->cacheForReverse(BuilderZ, toCache,
+                                getIndex(&call, CacheType::Tape));
+      }
+
       if (Mode == DerivativeMode::ReverseModeGradient ||
           Mode == DerivativeMode::ReverseModeCombined) {
         IRBuilder<> Builder2(call.getParent());
         getReverseBuilder(Builder2);
 
-        assert(!gutils->isConstantValue(call.getOperand(0)));
-        Value *d_req = gutils->invertPointerM(call.getOperand(0), Builder2);
-        if (d_req->getType()->isIntegerTy()) {
-          d_req = Builder2.CreateIntToPtr(
-              d_req,
-              PointerType::getUnqual(Type::getInt8PtrTy(call.getContext())));
-        }
-        auto i64 = Type::getInt64Ty(call.getContext());
-        Type *types[] = {
-            /*0 */ Type::getInt8PtrTy(call.getContext()),
-            /*1 */ i64,
-            /*2 */ Type::getInt8PtrTy(call.getContext()),
-            /*3 */ i64,
-            /*4 */ i64,
-            /*5 */ Type::getInt8PtrTy(call.getContext()),
-            /*6 */ Type::getInt8Ty(call.getContext()),
-        };
-        auto impi = StructType::get(call.getContext(), types, false);
-
-        Value *d_reqp = Builder2.CreateLoad(Builder2.CreatePointerCast(
-            d_req, PointerType::getUnqual(PointerType::getUnqual(impi))));
+        if (toCache == nullptr)
+          toCache = BuilderZ.CreatePHI(PointerType::getUnqual(impi), 1);
+        Value *d_reqp =
+            lookup(gutils->cacheForReverse(BuilderZ, toCache,
+                                           getIndex(&call, CacheType::Tape)),
+                   Builder2);
 
         Value *isNull = Builder2.CreateICmpEQ(
             d_reqp, Constant::getNullValue(d_reqp->getType()));
-        if (auto GV = gutils->newFunc->getParent()->getNamedValue(
-                "ompi_request_null")) {
-          isNull = Builder2.CreateICmpEQ(
-              d_reqp, Builder2.CreateBitCast(GV, d_reqp->getType()));
-        }
         BasicBlock *currentBlock = Builder2.GetInsertBlock();
         BasicBlock *nonnullBlock = gutils->addReverseBlock(
             currentBlock, currentBlock->getName() + "_nonnull",
@@ -3878,7 +3900,8 @@ public:
         }
 
         Function *dwait = getOrInsertDifferentialMPI_Wait(
-            *called->getParent(), types, d_req->getType());
+            *called->getParent(), types, call.getOperand(0)->getType());
+        Value *d_req = gutils->invertPointerM(call.getOperand(0), Builder2);
         Value *args[] = {Builder2.CreateExtractValue(cache, 0),
                          Builder2.CreateExtractValue(cache, 1),
                          Builder2.CreateExtractValue(cache, 2),
@@ -3900,20 +3923,76 @@ public:
     }
 
     if (funcName == "MPI_Waitall" || funcName == "PMPI_Waitall") {
+      assert(!gutils->isConstantValue(call.getOperand(1)));
+
+      Value *toCache = nullptr;
+      if (Mode == DerivativeMode::ReverseModePrimal ||
+          Mode == DerivativeMode::ReverseModeCombined) {
+        IRBuilder<> BuilderZ(gutils->getNewFromOriginal(&call));
+
+        Value *count =
+            lookup(gutils->getNewFromOriginal(call.getOperand(0)), BuilderZ);
+        Value *d_req_orig =
+            gutils->invertPointerM(call.getOperand(1), BuilderZ);
+        if (d_req_orig->getType()->isIntegerTy()) {
+          d_req_orig = BuilderZ.CreateIntToPtr(
+              d_req_orig,
+              PointerType::getUnqual(Type::getInt8PtrTy(call.getContext())));
+        }
+        d_req_orig = BuilderZ.CreateBitCast(
+            d_req_orig,
+            PointerType::get(
+                Type::getInt8Ty(call.getContext()),
+                cast<PointerType>(d_req_orig->getType())->getAddressSpace()));
+        auto i64 = Type::getInt64Ty(call.getContext());
+        count = BuilderZ.CreateZExtOrTrunc(count, i64);
+        llvm::Constant *ptrSize = ConstantInt::get(
+            count->getType(),
+            called->getParent()->getDataLayout().getTypeAllocSizeInBits(
+                d_req_orig->getType()) /
+                8);
+
+        toCache =
+            CallInst::CreateMalloc(&*BuilderZ.GetInsertPoint(), count->getType(),
+                                   Type::getInt8Ty(call.getContext()), ptrSize,
+                                   count, nullptr, "mpiwaitall_malloccache");
+        if (cast<Instruction>(toCache)->getParent() == nullptr) {
+          BuilderZ.Insert(cast<Instruction>(toCache));
+        }
+
+#if LLVM_VERSION_MAJOR >= 10
+        BuilderZ.CreateMemCpy(toCache, /*dstAlign*/ MaybeAlign(1), d_req_orig,
+                              /*srcAlign*/ MaybeAlign(1),
+                              BuilderZ.CreateMul(ptrSize, count));
+#else
+        BuilderZ.CreateMemCpy(toCache, /*dstAlign*/ 1, d_req_orig,
+                              /*srcAlign*/ 1,
+                              BuilderZ.CreateMul(ptrSize, count));
+#endif
+        gutils->cacheForReverse(BuilderZ, toCache,
+                                getIndex(&call, CacheType::Tape));
+      }
       if (Mode == DerivativeMode::ReverseModeGradient ||
           Mode == DerivativeMode::ReverseModeCombined) {
         IRBuilder<> Builder2(call.getParent());
         getReverseBuilder(Builder2);
 
-        assert(!gutils->isConstantValue(call.getOperand(1)));
         Value *count =
             lookup(gutils->getNewFromOriginal(call.getOperand(0)), Builder2);
-        Value *d_req_orig =
-            gutils->invertPointerM(call.getOperand(1), Builder2);
-        if (d_req_orig->getType()->isIntegerTy()) {
-          d_req_orig = Builder2.CreateIntToPtr(
+        Value *d_req_orig = toCache != nullptr ? toCache :
+            BuilderZ.CreatePHI(Type::getInt8PtrTy(call.getContext()), 1);
+        d_req_orig =
+            lookup(gutils->cacheForReverse(BuilderZ, toCache,
+                                           getIndex(&call, CacheType::Tape)),
+                   Builder2);
+        Value *tmpMalloc = d_req_orig;
+        if (call.getOperand(1)->getType()->isIntegerTy()) {
+          d_req_orig = Builder2.CreateBitCast(
               d_req_orig,
               PointerType::getUnqual(Type::getInt8PtrTy(call.getContext())));
+        } else {
+          d_req_orig =
+              Builder2.CreateBitCast(d_req_orig, call.getOperand(1)->getType());
         }
 
         BasicBlock *currentBlock = Builder2.GetInsertBlock();
@@ -3996,6 +4075,13 @@ public:
         Builder2.CreateCondBr(Builder2.CreateICmpEQ(inc, count), endBlock,
                               loopBlock);
         Builder2.SetInsertPoint(endBlock);
+
+        freecall = cast<CallInst>(
+            CallInst::CreateFree(tmpMalloc, Builder2.GetInsertBlock()));
+        freecall->addAttribute(AttributeList::FirstArgIndex,
+                               Attribute::NonNull);
+        if (freecall->getParent() == nullptr)
+          Builder2.Insert(freecall);
       }
       if (Mode == DerivativeMode::ReverseModeGradient)
         eraseIfUnused(call, /*erase*/ true, /*check*/ false);
