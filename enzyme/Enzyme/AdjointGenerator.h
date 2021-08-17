@@ -3744,7 +3744,22 @@ public:
             waitFunc = called->getParent()->getOrInsertFunction("MPI_Wait", FT);
           }
           assert(waitFunc);
-          auto fcall = Builder2.CreateCall(waitFunc, args);
+          
+          SmallVector<OperandBundleDef, 0> bundles;
+          
+          if (auto opb = call.getOperandBundle("jl_roots")) {
+              std::vector<Value*> Uses;
+              for (auto &Op : opb->Inputs) {
+                Value* V = Op.get();
+                Uses.push_back(lookup(gutils->getNewFromOriginal(V), Builder2));
+                if (!gutils->isConstantValue(V)) {
+                    Uses.push_back(gutils->invertPointerM(V, Builder2));
+                }
+              }
+              bundles.push_back(OperandBundleDef(opb->getTagName().str(), Uses));
+          }
+          
+          auto fcall = Builder2.CreateCall(waitFunc, args, bundles);
           fcall->setDebugLoc(gutils->getNewFromOriginal(call.getDebugLoc()));
 #if LLVM_VERSION_MAJOR >= 9
           if (auto F = dyn_cast<Function>(waitFunc.getCallee()))
@@ -3753,6 +3768,7 @@ public:
           if (auto F = dyn_cast<Function>(waitFunc))
             fcall->setCallingConv(F->getCallingConv());
 #endif
+          
           auto len_arg = Builder2.CreateZExtOrTrunc(
               lookup(gutils->getNewFromOriginal(call.getOperand(1)), Builder2),
               Type::getInt64Ty(Builder2.getContext()));
@@ -3979,6 +3995,8 @@ public:
 
         Value *count =
             lookup(gutils->getNewFromOriginal(call.getOperand(0)), Builder2);
+        Value *d_req_real = gutils->invertPointerM(call.getOperand(1), Builder2);
+
         Value *d_req_orig = toCache != nullptr ? toCache :
             BuilderZ.CreatePHI(Type::getInt8PtrTy(call.getContext()), 1);
         d_req_orig =
@@ -3987,6 +4005,9 @@ public:
                    Builder2);
         Value *tmpMalloc = d_req_orig;
         if (call.getOperand(1)->getType()->isIntegerTy()) {
+          d_req_real = Builder2.CreateIntToPtr(
+              d_req_real,
+              PointerType::getUnqual(Type::getInt8PtrTy(call.getContext())));
           d_req_orig = Builder2.CreateBitCast(
               d_req_orig,
               PointerType::getUnqual(Type::getInt8PtrTy(call.getContext())));
@@ -4020,6 +4041,7 @@ public:
 
         Value *idxs[] = {idx};
         Value *d_req = Builder2.CreateGEP(d_req_orig, idxs);
+        Value *d_req_out = Builder2.CreateGEP(d_req_real, idxs);
 
         auto i64 = Type::getInt64Ty(call.getContext());
         Type *types[] = {
@@ -4065,7 +4087,7 @@ public:
                          Builder2.CreateExtractValue(cache, 4),
                          Builder2.CreateExtractValue(cache, 5),
                          Builder2.CreateExtractValue(cache, 6),
-                         d_req};
+                         d_req_out};
         auto cal = Builder2.CreateCall(dwait, args);
         cal->setCallingConv(dwait->getCallingConv());
         cal->setDebugLoc(gutils->getNewFromOriginal(call.getDebugLoc()));
