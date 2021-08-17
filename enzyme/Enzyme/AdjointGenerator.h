@@ -1345,6 +1345,8 @@ public:
   }
 
   Value *lookup(Value *val, IRBuilder<> &Builder) {
+    assert(Mode == DerivativeMode::ReverseModeGradient ||
+           Mode == DerivativeMode::ReverseModeCombined);
     return gutils->lookupM(val, Builder);
   }
 
